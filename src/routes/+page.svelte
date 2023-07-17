@@ -1,6 +1,6 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
-import { beforeNavigate } from '$app/navigation';
+import { beforeNavigate, invalidateAll } from '$app/navigation';
 import type { SubmitFunction } from '@sveltejs/kit';
 
 export let data;
@@ -21,21 +21,27 @@ function operation() {
 		update,
 	}) => {
 		if (result.type !== 'success') {
-			update({ reset: true });
+			invalidateAll(); // Abort so re-read
 			return;
 		}
 		const accountName = formData.get('account') as string;
 		const accounts = await data.accounts.balances;
-		data.accounts.balances = Promise.resolve([
-			...accounts.filter(({ name }) => name !== accountName),
+		accounts.splice(
+			accounts.findIndex(({ name }) => name === accountName),
+			1,
 			{
 				name: accountName,
 				balance: Number(result.data),
-			},
-		]);
+			}
+		);
+		data.accounts.balances = Promise.resolve(accounts);
 		formElement.reset();
 	};
 	return actionReturnHandler;
+}
+
+function transaction() {
+	return () => invalidateAll();
 }
 </script>
 
@@ -79,11 +85,11 @@ function operation() {
 
 <hr />
 
-<form action="?/commit" method="POST" use:enhance>
+<form action="?/commit" method="POST" use:enhance={transaction}>
 	<button>Save changes</button>
 </form>
 
-<form action="?/abort" method="POST" use:enhance>
+<form action="?/abort" method="POST" use:enhance={transaction}>
 	<button>Cancel</button>
 </form>
 

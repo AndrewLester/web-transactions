@@ -72,7 +72,11 @@ export class Server {
 			return maxViableWrite.tentativeBalance;
 		}
 
+		console.log('Waiting for transaction to end');
+
 		await this.transactionEnd;
+
+		console.log('Ended');
 		return this.balance(timestamp, accountName);
 	}
 
@@ -122,7 +126,7 @@ export class Server {
 				}
 			}
 		}
-
+		this.endTransaction();
 		// Delete from transactions map
 	}
 
@@ -142,6 +146,8 @@ export class Server {
 	}
 
 	private write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
+		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
+
 		if (!this.database.accounts.has(accountName)) {
 			this.database.accounts.set(accountName, new Account(accountName, 0));
 		}
@@ -174,8 +180,6 @@ export class Server {
 		if (account.committedTimestamp === 0) {
 			account.creators.add(timestamp);
 		}
-
-		console.log(account);
 	}
 }
 

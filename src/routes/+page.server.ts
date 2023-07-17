@@ -13,7 +13,8 @@ export async function load({ cookies, url }) {
 	return {
 		timestamp,
 		accounts: {
-			balances: server.allBalances(timestamp).catch(() => {
+			balances: server.allBalances(timestamp).catch((e) => {
+				console.log(e);
 				cookies.set('timestamp', server.startTransaction().toString());
 				throw redirect(301, url.pathname);
 			}),
