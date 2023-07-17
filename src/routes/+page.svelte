@@ -4,23 +4,21 @@ import { beforeNavigate, invalidateAll } from '$app/navigation';
 import type { SubmitFunction } from '@sveltejs/kit';
 
 export let data;
-export let form;
 
-beforeNavigate(async ({ cancel, type }) => {
-	if (type !== 'form') {
-		document.cookie = 'abort=true; Secure';
-		await fetch('?/abort', { method: 'POST', body: new FormData() });
-	}
-});
+let error: string | undefined;
+
+$: console.log(data.timestamp);
 
 function operation() {
 	const actionReturnHandler: ReturnType<SubmitFunction> = async ({
 		formElement,
 		formData,
 		result,
-		update,
 	}) => {
 		if (result.type !== 'success') {
+			if (result.type === 'failure') {
+				error = (result.data as any).message;
+			}
 			invalidateAll(); // Abort so re-read
 			return;
 		}
@@ -41,14 +39,20 @@ function operation() {
 }
 
 function transaction() {
-	return () => invalidateAll();
+	const actionReturnHandler: ReturnType<SubmitFunction> = async ({ result }) => {
+		if (result.type === 'failure') {
+			error = (result.data as any).message;
+		}
+		invalidateAll();
+	};
+	return actionReturnHandler;
 }
 </script>
 
 <h1>Multi-user ATM</h1>
 
-{#if form?.message}
-	<p style="color: red;">{form.message}</p>
+{#if error}
+	<p style="color: red;">{error}</p>
 {/if}
 
 {#await data.accounts.balances}
@@ -56,6 +60,7 @@ function transaction() {
 {:then balances}
 	{#each balances as account (account.name)}
 		<form action="?/deposit" method="POST" use:enhance={operation}>
+			<input type="hidden" name="timestamp" value={data.timestamp} />
 			<p>{account.name} - {account.balance}</p>
 			<input type="hidden" name="account" value={account.name} />
 			<label for="amount-{account.name}">Amount</label>
@@ -76,6 +81,7 @@ function transaction() {
 <hr />
 
 <form action="?/deposit" method="POST" use:enhance={operation}>
+	<input type="hidden" name="timestamp" value={data.timestamp} />
 	<label for="account">Account name</label>
 	<input type="text" id="account" name="account" required maxlength="16" />
 	<label for="amount">Deposit</label>
@@ -86,10 +92,12 @@ function transaction() {
 <hr />
 
 <form action="?/commit" method="POST" use:enhance={transaction}>
+	<input type="hidden" name="timestamp" value={data.timestamp} />
 	<button>Save changes</button>
 </form>
 
 <form action="?/abort" method="POST" use:enhance={transaction}>
+	<input type="hidden" name="timestamp" value={data.timestamp} />
 	<button>Cancel</button>
 </form>
 
