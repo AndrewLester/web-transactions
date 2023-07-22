@@ -1,23 +1,22 @@
 import { errorFrom } from '$lib/error.js';
 import { server } from '$lib/server.js';
-import { fail, type Actions, redirect } from '@sveltejs/kit';
+import { fail } from '@sveltejs/kit';
 
-export async function load({ cookies, url }) {
+export async function load() {
 	const timestamp = server.startTransaction();
 	console.log('Timestamp:', timestamp);
 	return {
 		timestamp,
 		accounts: {
 			balances: server.allBalances(timestamp).catch((e) => {
-				console.log(e);
-				cookies.set('timestamp', server.startTransaction().toString());
-				throw redirect(301, url.pathname);
+				console.log('Error getting balances', e);
+				throw new Error('oopsie');
 			}),
 		},
 	};
 }
 
-export const actions: Actions = {
+export const actions = {
 	async deposit({ request }) {
 		const formData = await request.formData();
 		const timestamp = Number(formData.get('timestamp'));
@@ -57,6 +56,7 @@ export const actions: Actions = {
 	async abort({ request }) {
 		const formData = await request.formData();
 		const timestamp = Number(formData.get('timestamp'));
+		console.log('ABORTING:', timestamp);
 		try {
 			await server.abort(timestamp);
 		} catch (e) {
