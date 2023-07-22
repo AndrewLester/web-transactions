@@ -20,7 +20,22 @@ export class Server {
 	}
 
 	startTransaction(): Timestamp {
-		return this.timestamp++;
+		const timestamp = this.timestamp++;
+		setTimeout(() => {
+			if (!this.done(timestamp)) {
+				this.abort(timestamp);
+			}
+		}, 1000 * 30);
+		return timestamp;
+	}
+
+	done(timestamp: Timestamp): boolean {
+		for (const account of this.database.accounts.values()) {
+			if (account.tentativeWrites.map((tw) => tw.timestamp).includes(timestamp)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	endTransaction() {
