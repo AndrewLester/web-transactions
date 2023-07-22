@@ -53,13 +53,13 @@ export class Server {
 
 	async balance(timestamp: Timestamp, accountName: Account['name']): Promise<number> {
 		if (!this.database.accounts.has(accountName)) {
-			throw accountNotFound(this);
+			throw accountNotFound(this, timestamp);
 		}
 
 		const account = this.database.accounts.get(accountName)!;
 
 		if (timestamp <= account.committedTimestamp) {
-			throw timestampOudated(this);
+			throw timestampOudated(this, timestamp);
 		}
 
 		let maxViableWrite = {
@@ -78,7 +78,7 @@ export class Server {
 
 		if (maxViableWrite.timestamp === account.committedTimestamp) {
 			if (!account.committedTimestamp) {
-				throw accountNotFound(this);
+				throw accountNotFound(this, timestamp);
 			}
 
 			account.readTimestamps.add(timestamp);
@@ -87,11 +87,8 @@ export class Server {
 			return maxViableWrite.tentativeBalance;
 		}
 
-		console.log('Waiting for transaction to end');
-
 		await this.transactionEnd;
 
-		console.log('Ended');
 		return this.balance(timestamp, accountName);
 	}
 
@@ -110,7 +107,7 @@ export class Server {
 				const tentativeWrite = account.tentativeWrites[i];
 				if (tentativeWrite.timestamp === timestamp) {
 					if (tentativeWrite.tentativeBalance < 0) {
-						throw accountNegativeBal(this);
+						throw accountNegativeBal(this, timestamp);
 					}
 
 					account.committedBalance = tentativeWrite.tentativeBalance;
@@ -177,7 +174,7 @@ export class Server {
 		}
 
 		if (timestamp < maxReadTimestamp || timestamp <= account.committedTimestamp) {
-			throw timestampOudated(this);
+			throw timestampOudated(this, timestamp);
 		}
 
 		for (const tentativeWrite of account.tentativeWrites) {

@@ -1,3 +1,4 @@
+import type { Timestamp } from './database';
 import type { Server } from './server';
 
 export function errorIs(e: unknown, error: Error): boolean {
@@ -13,8 +14,8 @@ export function errorFrom(e: unknown): Error {
 }
 
 export function abortError(errorFunction: () => Error) {
-	return (server?: Server) => {
-		server?.endTransaction();
+	return (server?: Server, timestamp?: Timestamp) => {
+		server?.abort(timestamp!);
 		return errorFunction();
 	};
 }
