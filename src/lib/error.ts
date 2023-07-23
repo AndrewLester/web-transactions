@@ -1,5 +1,5 @@
-import type { Timestamp } from './database';
 import type { Server } from './server';
+import type { Timestamp } from './timestamp';
 
 export function errorIs(e: unknown, error: Error): boolean {
 	if (e === undefined) {

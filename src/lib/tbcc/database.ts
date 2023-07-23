@@ -1,4 +1,4 @@
-export type Timestamp = number;
+import type { Timestamp } from '$lib/timestamp';
 
 export class Database {
 	accounts = new Map<string, Account>();

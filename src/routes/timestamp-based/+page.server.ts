@@ -1,5 +1,5 @@
 import { errorFrom } from '$lib/error.js';
-import { server } from '$lib/server.js';
+import { server } from '$lib/tbcc/server.js';
 import { fail } from '@sveltejs/kit';
 
 export async function load() {

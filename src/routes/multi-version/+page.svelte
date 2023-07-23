@@ -1,15 +1,32 @@
 <script lang="ts">
 import { enhance } from '$app/forms';
 import { beforeNavigate, invalidateAll } from '$app/navigation';
+import { timeout } from '$lib/timestamp.js';
 import type { SubmitFunction } from '@sveltejs/kit';
+import { onMount } from 'svelte';
 
 export let data;
 
+let timeoutStart = Date.now();
+let timeoutCurrent = timeout;
 let error: string | undefined;
 let cancelForm: HTMLFormElement;
 
-$: console.log(data.timestamp);
-$: data.accounts.balances.then((accounts) => console.log('Accounts:', accounts));
+// Give them their time back after blocking ends, as is done in the backend
+$: data.accounts.balances.then(() => (timeoutStart = Date.now()));
+$: if (timeoutCurrent <= 0) {
+	// Grab a new timestamp once this one is timed out.
+	invalidateAll();
+	timeoutStart = Date.now();
+}
+
+onMount(() => {
+	const interval = setInterval(
+		() => (timeoutCurrent = timeout - Math.trunc((Date.now() - timeoutStart) / 1000)),
+		1000
+	);
+	return () => clearInterval(interval);
+});
 
 beforeNavigate(({ type }) => {
 	if (type !== 'form') {
@@ -24,11 +41,11 @@ function operation() {
 		formData,
 		result,
 	}) => {
+		timeoutStart = Date.now();
 		if (result.type !== 'success') {
 			if (result.type === 'failure') {
 				error = (result.data as any).message;
 			}
-			console.log('Operation failed, abort!');
 			cancelForm.requestSubmit();
 			return;
 		}
@@ -50,6 +67,7 @@ function operation() {
 
 function transaction() {
 	const actionReturnHandler: ReturnType<SubmitFunction> = async ({ result }) => {
+		timeoutStart = Date.now();
 		if (result.type === 'failure') {
 			error = (result.data as any).message;
 		}
@@ -65,7 +83,7 @@ function transaction() {
 	<p style="color: red;">{error}</p>
 {/if}
 
-<p>Timestamp: {data.timestamp}</p>
+<p>Timestamp: {data.timestamp}, Timeout: {timeoutCurrent}</p>
 
 {#await data.accounts.balances}
 	<p>Accounts are loading... someone else might be editing them.</p>
