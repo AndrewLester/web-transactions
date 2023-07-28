@@ -7,8 +7,8 @@ export const accountNotFound = abortError(() => new Error('Account not found'));
 export const timestampOudated = abortError(() => new Error('Timestamp oudated'));
 export const accountNegativeBal = abortError(() => new Error('Account has a negative balance'));
 
-export class TCCServer implements Server {
-	private database = new Database();
+export class TBCCServer implements Server {
+	protected database = new Database();
 	private config: ServerConfigEntry;
 	// servers: map[string]*rpc.Client For multi server 2PC + DB sharding
 	// transactions = new Map<number, Set<string>>(); Transaction ID to branches touched For multi server 2PC + DB sharding
@@ -42,7 +42,8 @@ export class TCCServer implements Server {
 		this.resetTimeout(timestamp);
 
 		if (!this.database.accounts.has(accountName)) {
-			throw accountNotFound(this, timestamp);
+			// Don't abort yet...
+			throw accountNotFound();
 		}
 
 		const account = this.database.accounts.get(accountName)!;
@@ -67,7 +68,8 @@ export class TCCServer implements Server {
 
 		if (maxViableWrite.timestamp === account.committedTimestamp) {
 			if (!account.committedTimestamp) {
-				throw accountNotFound(this, timestamp);
+				// Don't abort yet...
+				throw accountNotFound();
 			}
 
 			account.readTimestamps.add(timestamp);
@@ -81,14 +83,15 @@ export class TCCServer implements Server {
 		return this.balance(timestamp, accountName);
 	}
 
+	allAccountNames(timestamp: Timestamp): string[] {
+		return [...this.database.accounts.keys()].filter(this.visibleAccountsFilter(timestamp));
+	}
+
 	async allBalances(timestamp: Timestamp): Promise<{ name: string; balance: number }[]> {
 		return await Promise.all(
 			[...this.database.accounts.keys()]
 				// Only get accounts that are committed or we created
-				.filter((accountName) => {
-					const account = this.database.accounts.get(accountName)!;
-					return account.committedTimestamp > 0 || account.creators.has(timestamp);
-				})
+				.filter(this.visibleAccountsFilter(timestamp))
 				.map(async (account) => ({
 					name: account,
 					balance: await this.balance(timestamp, account),
@@ -119,6 +122,7 @@ export class TCCServer implements Server {
 		for (const account of this.database.accounts.values()) {
 			account.creators.delete(timestamp);
 			if (account.creators.size === 0 && account.committedTimestamp === 0) {
+				console.log('Removing:', account.name);
 				this.database.accounts.delete(account.name);
 				continue;
 			}
@@ -137,6 +141,10 @@ export class TCCServer implements Server {
 		// Delete from transactions map
 	}
 
+	numAccounts(timestamp: Timestamp) {
+		return [...this.database.accounts.keys()].filter(this.visibleAccountsFilter(timestamp)).length;
+	}
+
 	private endTransaction(timestamp?: Timestamp) {
 		if (timestamp) {
 			this.resetTimeout(timestamp, true);
@@ -146,7 +154,8 @@ export class TCCServer implements Server {
 	}
 
 	private resetTimeout(timestamp: Timestamp, cancel = false) {
-		clearInterval(this.timeouts.get(timestamp));
+		clearTimeout(this.timeouts.get(timestamp));
+
 		if (cancel) {
 			this.timeouts.delete(timestamp);
 			return;
@@ -156,6 +165,7 @@ export class TCCServer implements Server {
 			timestamp,
 			setTimeout(() => {
 				if (!this.isDone(timestamp)) {
+					console.log('Aborting after timeout');
 					this.abort(timestamp);
 				}
 			}, 1000 * timeout)
@@ -180,13 +190,15 @@ export class TCCServer implements Server {
 		} catch (e) {
 			// Special case, account not found && amount >= 0 passes to create account
 			if (!errorIs(e, accountNotFound()) || amount < 0) {
+				// Now abort
+				this.abort(timestamp);
 				throw e;
 			}
 		}
 		this.write(timestamp, account, balance + amount);
 	}
 
-	private write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
+	protected write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
 		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
 
 		if (!this.database.accounts.has(accountName)) {
@@ -222,6 +234,13 @@ export class TCCServer implements Server {
 			account.creators.add(timestamp);
 		}
 	}
+
+	private visibleAccountsFilter(timestamp: Timestamp) {
+		return (accountName: string) => {
+			const account = this.database.accounts.get(accountName)!;
+			return account.committedTimestamp > 0 || account.creators.has(timestamp);
+		};
+	}
 }
 
 // Some parts of this are only useful for multi server
@@ -231,7 +250,7 @@ type ServerConfigEntry = {
 	port: string; // multi
 };
 
-export const server = new TCCServer({
+export const server = new TBCCServer({
 	branch: 'Branch 1',
 	hostname: 'localhost',
 	port: '8080',

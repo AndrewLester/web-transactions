@@ -1,5 +1,21 @@
 :root {
 	-webkit-font-smoothing: antialiased;
+
+	--surface-light: rgb(241, 236, 236);
+	--surface-dark: rgb(203, 199, 199);
+	--skeleton-color-light: rgb(255, 255, 255);
+	--skeleton-color-dark: rgb(233, 232, 232);
+
+	--nav-height: 65px;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--surface-light: rgb(55, 55, 55);
+		--surface-dark: rgb(46, 46, 46);
+		--skeleton-color-light: rgb(147, 147, 147);
+		--skeleton-color-dark: rgb(110, 110, 110);
+	}
 }
 
 *,
@@ -10,4 +26,12 @@
 	box-sizing: border-box;
 	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
 		Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+h1 {
+	margin-bottom: 0.5em;
+}
+
+abbr {
+	cursor: help;
 }

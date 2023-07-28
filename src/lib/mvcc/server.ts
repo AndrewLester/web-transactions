@@ -64,7 +64,13 @@ export class MVCCServer implements Server {
 		return account.balance;
 	}
 
+	allAccountNames(timestamp: number): string[] {
+		// TODO: Filter this by accessible to current user...
+		return [...this.database.snapshots.keys()];
+	}
+
 	async allBalances(timestamp: Timestamp): Promise<{ name: string; balance: number }[]> {
+		// TODO: Filter this by accessible to current user...
 		return await Promise.all(
 			[...this.database.snapshots.keys()].map(async (account) => ({
 				name: account,
@@ -78,6 +84,11 @@ export class MVCCServer implements Server {
 	async abort(timestamp: Timestamp) {
 		timestamp;
 		// Do nothing, clean up snapshots later
+	}
+
+	numAccounts(timestamp: Timestamp): number {
+		// TODO: this doesn't work
+		return this.database.snapshots.size;
 	}
 
 	private async readThenUpdate(timestamp: Timestamp, account: Account['name'], amount: number) {
