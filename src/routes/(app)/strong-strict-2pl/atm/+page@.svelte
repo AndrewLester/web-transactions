@@ -3,10 +3,10 @@ import { enhance } from '$app/forms';
 import { beforeNavigate, invalidateAll } from '$app/navigation';
 import Account from '$lib/components/Account.svelte';
 import { operation, transaction, type OperationSuccessResult } from '$lib/form.js';
+import type { Operation } from '$lib/server.js';
 import { timeout } from '$lib/timestamp.js';
 import { onMount } from 'svelte';
 import { fade } from 'svelte/transition';
-import type { Operation } from './+page.server.js';
 
 export let data;
 
@@ -76,7 +76,7 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 						<Account
 							account={{ name: 'Skeleton', balance: 100000 }}
 							timestamp={0}
-							operationArgs={[{ success() {}, abort() {} }]}
+							operationArgs={{ success() {}, abort() {} }}
 							skeleton
 						/>
 					{/each}
@@ -87,16 +87,14 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 						<Account
 							{account}
 							timestamp={data.timestamp}
-							operationArgs={[
-								{
-									success,
-									abort(e) {
-										timeoutStart = Date.now();
-										error = e;
-										cancelForm.requestSubmit();
-									},
+							operationArgs={{
+								success,
+								abort(e) {
+									timeoutStart = Date.now();
+									error = e;
+									cancelForm.requestSubmit();
 								},
-							]}
+							}}
 						/>
 					{/each}
 				</div>

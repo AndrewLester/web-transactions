@@ -7,6 +7,9 @@ import NavLink from '$lib/components/NavLink.svelte';
 		Timestamp-based (<abbr title="Avoids Cascading Aborts">ACA</abbr>)
 	</NavLink>
 	<NavLink href="/multi-version">Multi-version</NavLink>
+	<NavLink href="/strong-strict-2pl"
+		><abbr title="Strong Strict Two-Phase Locking">SS2PL</abbr></NavLink
+	>
 </nav>
 
 <slot />

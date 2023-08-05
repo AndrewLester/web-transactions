@@ -4,8 +4,9 @@ import { timeout, type Timestamp } from '$lib/timestamp';
 import { Database, Account } from './database';
 
 export const accountNotFound = abortError(() => new Error('Account not found'));
-export const timestampOudated = abortError(() => new Error('Timestamp oudated'));
 export const accountNegativeBal = abortError(() => new Error('Account has a negative balance'));
+export const timestampInvalid = abortError(() => new Error('Timestamp invalid'));
+export const deadlockDetected = abortError(() => new Error('Deadlock detected'));
 
 export class SS2PLServer implements Server {
 	protected database = new Database();
@@ -13,115 +14,146 @@ export class SS2PLServer implements Server {
 	// servers: map[string]*rpc.Client For multi server 2PC + DB sharding
 	// transactions = new Map<number, Set<string>>(); Transaction ID to branches touched For multi server 2PC + DB sharding
 	private timestamp: Timestamp = Date.now();
-	private resolveTransactionEnd = () => {};
 	private timeouts = new Map<Timestamp, number>();
-	transactionEnd: Promise<void>;
+	private waitForGraph = new Map<Timestamp, Set<Timestamp>>();
 
 	constructor(config: ServerConfigEntry) {
 		this.config = config;
-		this.transactionEnd = new Promise((resolve) => (this.resolveTransactionEnd = resolve));
 	}
 
 	startTransaction(): Timestamp {
 		const timestamp = this.timestamp++;
+		this.database.setupWorkspace(timestamp);
 		this.resetTimeout(timestamp);
 		return timestamp;
 	}
 
 	async deposit(timestamp: Timestamp, account: Account['name'], amount: number) {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
 		this.resetTimeout(timestamp);
 		return await this.readThenUpdate(timestamp, account, amount);
 	}
 
 	async withdraw(timestamp: Timestamp, account: Account['name'], amount: number) {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
 		this.resetTimeout(timestamp);
 		return await this.readThenUpdate(timestamp, account, -amount);
 	}
 
-	async balance(timestamp: Timestamp, accountName: Account['name']): Promise<number> {
-		this.resetTimeout(timestamp);
-
-		if (!this.database.accounts.has(accountName)) {
-			// Don't abort yet...
-			throw accountNotFound();
+	async balance(
+		timestamp: Timestamp,
+		accountName: Account['name'],
+		abortNotFound = true
+	): Promise<number> {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
 		}
 
-		const account = this.database.accounts.get(accountName)!;
+		this.resetTimeout(timestamp);
 
-		await account.lock.rLock(timestamp);
+		if (!this.database.hasAccount(timestamp, accountName)) {
+			// Don't abort yet...
+			if (abortNotFound) {
+				throw accountNotFound(this, timestamp);
+			} else {
+				throw accountNotFound();
+			}
+		}
 
-		return account.balance;
+		const lock = this.database.getLock(timestamp, accountName, 'read');
+
+		const waitFor = lock.getWaitFor(timestamp, 'read');
+		for (const other of waitFor) {
+			if (!this.waitForGraph.has(timestamp)) {
+				this.waitForGraph.set(timestamp, new Set());
+			}
+			this.waitForGraph.get(timestamp)!.add(other);
+		}
+
+		if (this.hasWaitForCycle(timestamp)) {
+			throw deadlockDetected();
+		}
+
+		await lock.rLock(timestamp);
+
+		// We aborted...
+		if (!this.database.hasWorkspace(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
+
+		return this.database.getBalance(timestamp, accountName);
 	}
 
 	allAccountNames(timestamp: Timestamp): string[] {
-		return [...this.database.accounts.keys()].filter(this.visibleAccountsFilter(timestamp));
+		return [...this.database.getAccountNames(timestamp)];
 	}
 
 	async allBalances(timestamp: Timestamp): Promise<{ name: string; balance: number }[]> {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
+
 		return await Promise.all(
-			[...this.database.accounts.keys()]
-				// Only get accounts that are committed or we created
-				.filter(this.visibleAccountsFilter(timestamp))
-				.map(async (account) => ({
-					name: account,
-					balance: await this.balance(timestamp, account),
-				}))
+			this.allAccountNames(timestamp).map(async (account) => ({
+				name: account,
+				balance: await this.balance(timestamp, account),
+			}))
 		);
 	}
 
 	async commit(timestamp: Timestamp) {
-		for (const account of this.database.accounts.values()) {
-			for (let i = 0; i < account.tentativeWrites.length; i++) {
-				const tentativeWrite = account.tentativeWrites[i];
-				if (tentativeWrite.timestamp === timestamp) {
-					if (tentativeWrite.tentativeBalance < 0) {
-						throw accountNegativeBal(this, timestamp);
-					}
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
 
-					account.committedBalance = tentativeWrite.tentativeBalance;
-					account.committedTimestamp = timestamp;
-					account.tentativeWrites.splice(i, 1);
-					break;
+		for (const { balance, lock } of this.database.getBalancesAndLocks(timestamp)) {
+			if (lock.hasLock(timestamp, 'write')) {
+				if (balance < 0) {
+					throw accountNegativeBal(this, timestamp);
 				}
 			}
 		}
+
+		this.database.commitWorkspace(timestamp);
+
 		this.endTransaction(timestamp);
 	}
 
 	async abort(timestamp: Timestamp) {
-		for (const account of this.database.accounts.values()) {
-			account.creators.delete(timestamp);
-			if (account.creators.size === 0 && account.committedTimestamp === 0) {
-				console.log('Removing:', account.name);
-				this.database.accounts.delete(account.name);
-				continue;
-			}
-
-			account.readTimestamps.delete(timestamp);
-
-			for (let i = 0; i < account.tentativeWrites.length; i++) {
-				const tentativeWrite = account.tentativeWrites[i];
-				if (timestamp == tentativeWrite.timestamp) {
-					account.tentativeWrites.splice(i, 1);
-					break;
-				}
-			}
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
 		}
+
 		this.endTransaction(timestamp);
-		// Delete from transactions map
 	}
 
 	numAccounts(timestamp: Timestamp) {
-		return [...this.database.accounts.keys()].filter(this.visibleAccountsFilter(timestamp)).length;
+		return this.allAccountNames(timestamp).length;
 	}
 
 	private endTransaction(timestamp: Timestamp) {
-		if (timestamp) {
-			this.resetTimeout(timestamp, true);
-			for (const account of this.database.accounts.values()) {
-				account.lock.unlock(timestamp);
+		this.resetTimeout(timestamp, true);
+
+		for (const { lock } of this.database.getBalancesAndLocks(timestamp)) {
+			if (lock.hasLock(timestamp)) {
+				lock.unlock(timestamp);
 			}
 		}
+
+		const deletedTimestamps = [] as Timestamp[];
+		for (const [timestamp, waitFor] of this.waitForGraph.entries()) {
+			waitFor.delete(timestamp);
+			if (waitFor.size === 0) {
+				deletedTimestamps.push(timestamp);
+			}
+		}
+		deletedTimestamps.forEach(this.waitForGraph.delete);
+
+		this.database.destroyWorkspace(timestamp);
 	}
 
 	private resetTimeout(timestamp: Timestamp, cancel = false) {
@@ -135,29 +167,30 @@ export class SS2PLServer implements Server {
 		this.timeouts.set(
 			timestamp,
 			setTimeout(() => {
-				if (!this.isDone(timestamp)) {
-					console.log('Aborting after timeout');
+				if (this.database.hasWorkspace(timestamp)) {
+					console.log('Aborting after timeout', timestamp);
 					this.abort(timestamp);
 				}
 			}, 1000 * timeout)
 		);
 	}
 
-	private isDone(timestamp: Timestamp): boolean {
-		for (const account of this.database.accounts.values()) {
-			if (account.tentativeWrites.map((tw) => tw.timestamp).includes(timestamp)) {
-				return false;
-			}
-		}
-		return true;
-	}
+	// PROBLEMATIC see TBCC
+	// private isDone(timestamp: Timestamp): boolean {
+	// 	for (const account of this.database.accounts.values()) {
+	// 		if (account.tentativeWrites.map((tw) => tw.timestamp).includes(timestamp)) {
+	// 			return false;
+	// 		}
+	// 	}
+	// 	return true;
+	// }
 
 	private async readThenUpdate(timestamp: Timestamp, account: Account['name'], amount: number) {
 		// Skip branches touched logic, for only 1 branch
 
 		let balance = 0;
 		try {
-			balance = await this.balance(timestamp, account);
+			balance = await this.balance(timestamp, account, false);
 		} catch (e) {
 			// Special case, account not found && amount >= 0 passes to create account
 			if (!errorIs(e, accountNotFound()) || amount < 0) {
@@ -166,29 +199,66 @@ export class SS2PLServer implements Server {
 				throw e;
 			}
 		}
-		this.write(timestamp, account, balance + amount);
+		await this.write(timestamp, account, balance + amount);
 	}
 
 	protected async write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
 		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
 
-		if (!this.database.accounts.has(accountName)) {
-			this.database.accounts.set(accountName, new Account(accountName, 0));
+		const lock = this.database.getLock(timestamp, accountName, 'write');
+
+		const waitFor = lock.getWaitFor(timestamp, 'write');
+		for (const other of waitFor) {
+			if (!this.waitForGraph.has(timestamp)) {
+				this.waitForGraph.set(timestamp, new Set());
+			}
+			this.waitForGraph.get(timestamp)!.add(other);
 		}
 
-		const account = this.database.accounts.get(accountName)!;
+		if (this.hasWaitForCycle(timestamp)) {
+			throw deadlockDetected();
+		}
 
-		await account.lock.wLock(timestamp);
+		console.log('Acquiring write lock...', timestamp, waitFor);
+		await lock.wLock(timestamp);
+		console.log('Got it:', timestamp);
 
-		account.balance = amount;
+		// We aborted...
+		if (!this.database.hasWorkspace(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
+
+		this.database.setBalance(timestamp, accountName, amount);
 	}
 
-	private visibleAccountsFilter(timestamp: Timestamp) {
-		return (accountName: string) => {
-			const account = this.database.accounts.get(accountName)!;
-			return account.committedTimestamp > 0 || account.creators.has(timestamp);
-		};
+	private hasWaitForCycle(timestamp: Timestamp) {
+		if (this.waitForGraph.size === 0) {
+			return false;
+		}
+
+		const visited = new Set<Timestamp>([]);
+		return isCyclic(timestamp, this.waitForGraph, visited);
 	}
+
+	private isTimestampValid(timestamp: Timestamp) {
+		return timestamp <= this.timestamp;
+	}
+}
+
+function isCyclic<Node>(node: Node, graph: Map<Node, Set<Node>>, visited: Set<Node>) {
+	if (visited.has(node)) {
+		return true;
+	}
+
+	visited.add(node);
+	const neighbors = graph.get(node) ?? new Set([]);
+	for (const neighbor of neighbors) {
+		if (isCyclic(neighbor, graph, visited)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // Some parts of this are only useful for multi server

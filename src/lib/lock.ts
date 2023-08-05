@@ -48,6 +48,37 @@ export class RWLock<ID> {
 		this.readUnlockedPromises.delete(id);
 	}
 
+	getWaitFor(id: ID, mode: 'read' | 'write') {
+		const waitFor = [] as ID[];
+
+		if (this.writeLocked === id) {
+			return waitFor;
+		}
+
+		if (this.writeLocked !== null) {
+			waitFor.push(this.writeLocked);
+		}
+
+		const otherReaders = [...this.readLocked.keys()].filter((otherId) => otherId !== id);
+		if (mode === 'write' && otherReaders.length > 0) {
+			waitFor.push(...otherReaders);
+		}
+
+		return waitFor;
+	}
+
+	hasLock(id: ID, type?: 'read' | 'write') {
+		const hasRead = this.readLocked.has(id);
+		const hasWrite = this.writeLocked === id;
+		if (!type) {
+			return hasRead || hasWrite;
+		}
+		if (type === 'read') {
+			return hasRead;
+		}
+		return hasWrite;
+	}
+
 	unlock(id: ID) {
 		if (this.writeLocked !== id && !this.readLocked.has(id)) {
 			throw new Error('Attempted to unlock un-owned lock');

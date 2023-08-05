@@ -5,6 +5,7 @@ import { Database, Account, type TentativeWrite } from './database';
 
 export const accountNotFound = abortError(() => new Error('Account not found'));
 export const timestampOudated = abortError(() => new Error('Timestamp oudated'));
+export const timestampInvalid = abortError(() => new Error('Timestamp invalid'));
 export const accountNegativeBal = abortError(() => new Error('Account has a negative balance'));
 
 export class TBCCServer implements Server {
@@ -23,27 +24,44 @@ export class TBCCServer implements Server {
 	}
 
 	startTransaction(): Timestamp {
-		const timestamp = this.timestamp++;
-		this.resetTimeout(timestamp);
-		return timestamp;
+		this.resetTimeout(++this.timestamp);
+		return this.timestamp;
 	}
 
 	async deposit(timestamp: Timestamp, account: Account['name'], amount: number) {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
 		this.resetTimeout(timestamp);
 		return await this.readThenUpdate(timestamp, account, amount);
 	}
 
 	async withdraw(timestamp: Timestamp, account: Account['name'], amount: number) {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
 		this.resetTimeout(timestamp);
 		return await this.readThenUpdate(timestamp, account, -amount);
 	}
 
-	async balance(timestamp: Timestamp, accountName: Account['name']): Promise<number> {
+	async balance(
+		timestamp: Timestamp,
+		accountName: Account['name'],
+		abortNotFound = true
+	): Promise<number> {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
+
 		this.resetTimeout(timestamp);
 
 		if (!this.database.accounts.has(accountName)) {
 			// Don't abort yet...
-			throw accountNotFound();
+			if (abortNotFound) {
+				throw accountNotFound(this, timestamp);
+			} else {
+				throw accountNotFound();
+			}
 		}
 
 		const account = this.database.accounts.get(accountName)!;
@@ -84,22 +102,27 @@ export class TBCCServer implements Server {
 	}
 
 	allAccountNames(timestamp: Timestamp): string[] {
+		// Only get accounts that are committed or we created
 		return [...this.database.accounts.keys()].filter(this.visibleAccountsFilter(timestamp));
 	}
 
 	async allBalances(timestamp: Timestamp): Promise<{ name: string; balance: number }[]> {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
 		return await Promise.all(
-			[...this.database.accounts.keys()]
-				// Only get accounts that are committed or we created
-				.filter(this.visibleAccountsFilter(timestamp))
-				.map(async (account) => ({
-					name: account,
-					balance: await this.balance(timestamp, account),
-				}))
+			this.allAccountNames(timestamp).map(async (account) => ({
+				name: account,
+				balance: await this.balance(timestamp, account),
+			}))
 		);
 	}
 
 	async commit(timestamp: Timestamp) {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
+
 		for (const account of this.database.accounts.values()) {
 			for (let i = 0; i < account.tentativeWrites.length; i++) {
 				const tentativeWrite = account.tentativeWrites[i];
@@ -119,6 +142,10 @@ export class TBCCServer implements Server {
 	}
 
 	async abort(timestamp: Timestamp) {
+		if (!this.isTimestampValid(timestamp)) {
+			throw timestampInvalid(this, timestamp);
+		}
+
 		for (const account of this.database.accounts.values()) {
 			account.creators.delete(timestamp);
 			if (account.creators.size === 0 && account.committedTimestamp === 0) {
@@ -142,7 +169,7 @@ export class TBCCServer implements Server {
 	}
 
 	numAccounts(timestamp: Timestamp) {
-		return [...this.database.accounts.keys()].filter(this.visibleAccountsFilter(timestamp)).length;
+		return this.allAccountNames(timestamp).length;
 	}
 
 	private endTransaction(timestamp?: Timestamp) {
@@ -164,29 +191,35 @@ export class TBCCServer implements Server {
 		this.timeouts.set(
 			timestamp,
 			setTimeout(() => {
-				if (!this.isDone(timestamp)) {
-					console.log('Aborting after timeout');
-					this.abort(timestamp);
-				}
+				// This might abort transactions twice, which only really has the effect of waking up
+				// waiting transactions in incorrect contexts... we'll suffer this for now.
+				// if (!this.isDone(timestamp)) {
+				console.log('Aborting after timeout');
+				this.abort(timestamp);
+				// }
 			}, 1000 * timeout)
 		);
 	}
 
-	private isDone(timestamp: Timestamp): boolean {
-		for (const account of this.database.accounts.values()) {
-			if (account.tentativeWrites.map((tw) => tw.timestamp).includes(timestamp)) {
-				return false;
-			}
-		}
-		return true;
-	}
+	// This function is problematic...
+	// private isDone(timestamp: Timestamp): boolean {
+	// 	for (const account of this.database.accounts.values()) {
+	// 		if (account.tentativeWrites.map((tw) => tw.timestamp).includes(timestamp)) {
+	// 			return false;
+	// 		}
+	// 		if (account.readTimestamps.has(timestamp)) {
+	// 			return false;
+	// 		}
+	// 	}
+	// 	return true;
+	// }
 
 	private async readThenUpdate(timestamp: Timestamp, account: Account['name'], amount: number) {
 		// Skip branches touched logic, for only 1 branch
 
 		let balance = 0;
 		try {
-			balance = await this.balance(timestamp, account);
+			balance = await this.balance(timestamp, account, false);
 		} catch (e) {
 			// Special case, account not found && amount >= 0 passes to create account
 			if (!errorIs(e, accountNotFound()) || amount < 0) {
@@ -240,6 +273,10 @@ export class TBCCServer implements Server {
 			const account = this.database.accounts.get(accountName)!;
 			return account.committedTimestamp > 0 || account.creators.has(timestamp);
 		};
+	}
+
+	private isTimestampValid(timestamp: Timestamp) {
+		return timestamp <= this.timestamp;
 	}
 }
 

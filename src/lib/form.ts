@@ -8,11 +8,15 @@ export type OperationSuccessResult = Extract<ActionResult<OperationSuccess>, { t
 export function operation({
 	success,
 	abort,
+	start,
 }: {
 	success?: (action: URL, formData: FormData, result: OperationSuccessResult) => void;
 	abort?: (error?: string) => void;
+	start?: () => void;
 }) {
 	return () => {
+		start?.();
+
 		const actionReturnHandler: ReturnType<SubmitFunction<OperationSuccess>> = async ({
 			action,
 			formElement,
