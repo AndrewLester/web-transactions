@@ -19,8 +19,8 @@ let transactions = [] as Operation[][];
 // Give them their time back after blocking ends, as is done in the backend
 $: data.accounts.balances.then(() => (timeoutStart = Date.now()));
 $: if (timeoutCurrent <= 0) {
-	data.operations = [...data.operations, { type: 'abort' }];
-	transactions = [data.operations, ...transactions];
+	addOperation({ type: 'abort' });
+	finishTransaction();
 	// Grab a new timestamp once this one is timed out.
 	invalidateAll();
 	timeoutStart = Date.now();
@@ -40,6 +40,15 @@ beforeNavigate(({ type }) => {
 		fetch('?/abort', { method: 'POST', body: new FormData(cancelForm) });
 	}
 });
+
+function addOperation(operation: Operation) {
+	data.operations = [...data.operations, operation];
+}
+
+// Make sure you invalidate after this!
+function finishTransaction() {
+	transactions = [data.operations, ...transactions];
+}
 
 async function success(action: URL, formData: FormData, result: OperationSuccessResult) {
 	timeoutStart = Date.now();
@@ -137,8 +146,8 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 			use:enhance={transaction({
 				success() {
 					timeoutStart = Date.now();
-					data.operations = [...data.operations, { type: 'commit' }];
-					transactions = [data.operations, ...transactions];
+					addOperation({ type: 'commit' });
+					finishTransaction();
 				},
 				abort(e) {
 					error = e;
@@ -157,8 +166,8 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 			use:enhance={transaction({
 				success() {
 					timeoutStart = Date.now();
-					data.operations = [...data.operations, { type: 'abort' }];
-					transactions = [data.operations, ...transactions];
+					addOperation({ type: 'abort' });
+					finishTransaction();
 				},
 				abort(e) {
 					error = e;
