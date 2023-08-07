@@ -90,10 +90,17 @@ export class RWLock<ID> {
 			return;
 		}
 
+		// If waiting for the lock... let them through. This is specifically for ss2pl... not ideal
+		this.writeUnlockedPromises.delete(id);
+		// TODO: do we also call resolve here...?
+
 		this.readLocked.delete(id);
 		if (this.readLocked.size <= 1) {
 			this.readUnlocked(this.readLocked.size === 1);
 		}
+
+		// Same as other above...
+		this.readUnlockedPromises.delete(id);
 	}
 
 	private writeUnlockedPromise(id: ID) {

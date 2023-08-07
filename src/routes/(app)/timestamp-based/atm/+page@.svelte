@@ -71,7 +71,7 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 			account: accountName,
 			value: Number(formData.get('amount')),
 		},
-		// We always get balance right after making a change
+		// We always balance right after making a change
 		{
 			type: 'balance',
 			account: accountName,
@@ -110,6 +110,9 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 									error = e;
 									cancelForm.requestSubmit();
 								},
+								start() {
+									timeoutStart = Date.now();
+								},
 							}}
 						/>
 					{/each}
@@ -131,6 +134,9 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 					timeoutStart = Date.now();
 					error = e;
 					cancelForm.requestSubmit();
+				},
+				start() {
+					timeoutStart = Date.now();
 				},
 			})}
 		>

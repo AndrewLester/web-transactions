@@ -110,6 +110,9 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 									error = e;
 									cancelForm.requestSubmit();
 								},
+								start() {
+									timeoutStart = Date.now();
+								},
 							}}
 						/>
 					{/each}
@@ -131,6 +134,9 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 					timeoutStart = Date.now();
 					error = e;
 					cancelForm.requestSubmit();
+				},
+				start() {
+					timeoutStart = Date.now();
 				},
 			})}
 		>

@@ -25,7 +25,10 @@ function loadingWrap(func?: (...args: any) => void) {
 	use:enhance={operation({
 		success: loadingWrap(operationArgs.success),
 		abort: loadingWrap(operationArgs.abort),
-		start: () => (loading = true),
+		start: () => {
+			loading = true;
+			operationArgs.start?.();
+		},
 	})}
 	class:skeleton
 	class:loading

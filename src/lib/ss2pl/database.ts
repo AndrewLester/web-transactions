@@ -56,7 +56,7 @@ export class Database {
 	}
 
 	getLock(timestamp: Timestamp, accountName: Account['name'], type: 'read' | 'write') {
-		let account = this.workspaces.get(timestamp)!.get(accountName)?.account;
+		let account = this.workspaces.get(timestamp)?.get(accountName)?.account;
 		if (!account) {
 			account = this.accounts.get(accountName);
 		}
