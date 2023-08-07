@@ -19,6 +19,8 @@ let transactions = [] as Operation[][];
 // Give them their time back after blocking ends, as is done in the backend
 $: data.accounts.balances.then(() => (timeoutStart = Date.now()));
 $: if (timeoutCurrent <= 0) {
+	data.operations = [...data.operations, { type: 'abort' }];
+	transactions = [data.operations, ...transactions];
 	// Grab a new timestamp once this one is timed out.
 	invalidateAll();
 	timeoutStart = Date.now();
