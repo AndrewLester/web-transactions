@@ -16,7 +16,7 @@ export function errorFrom(e: unknown): Error {
 export function abortError(errorFunction: () => Error) {
 	return (server?: Server, timestamp?: Timestamp) => {
 		if (server) {
-			console.log('Aborting due to error:', errorFunction().message);
+			console.log('Aborting due to error:', timestamp, errorFunction().message);
 		}
 		server?.abort(timestamp!);
 		return errorFunction();

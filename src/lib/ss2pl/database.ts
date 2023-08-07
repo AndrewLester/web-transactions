@@ -28,7 +28,7 @@ export class Database {
 			}
 
 			this.workspaces.get(timestamp)!.set(accountName, {
-				account: this.accounts.get(accountName)!,
+				account: { ...this.accounts.get(accountName)! },
 				written: false,
 			});
 		}
@@ -44,7 +44,8 @@ export class Database {
 			}
 
 			this.workspaces.get(timestamp)!.set(accountName, {
-				account,
+				// Copy the account!
+				account: { ...account },
 				written: true,
 			});
 		}
@@ -55,23 +56,27 @@ export class Database {
 	}
 
 	getLock(timestamp: Timestamp, accountName: Account['name'], type: 'read' | 'write') {
-		if (!this.workspaces.get(timestamp)!.has(accountName)) {
-			let account = this.accounts.get(accountName);
-			if (!account) {
-				if (type === 'read') {
-					throw new Error('Account does not exist');
-				}
-				// Writes special case can create an account
-				account = new Account(accountName, 0);
+		let account = this.workspaces.get(timestamp)!.get(accountName)?.account;
+		if (!account) {
+			account = this.accounts.get(accountName);
+		}
+
+		if (!account) {
+			if (type === 'read') {
+				throw new Error('Account does not exist');
 			}
 
+			account = new Account(accountName, 0);
+
+			// This is technically incorrect behavior... be CAREFUL, we should not have this balance in the workspace at this time
+			// The reason we have to do this here is that we need the lock instance set up
 			this.workspaces.get(timestamp)!.set(accountName, {
-				account,
+				account: { ...account },
 				written: false, // Not actually written yet though
 			});
 		}
 
-		return this.workspaces.get(timestamp)!.get(accountName)!.account.lock;
+		return account.lock;
 	}
 
 	getBalancesAndLocks(timestamp: Timestamp) {

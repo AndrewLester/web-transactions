@@ -31,7 +31,7 @@ export function serverPageFunctions(server: Server) {
 				accounts: {
 					balances: server.allBalances(timestamp).catch((e) => {
 						console.log('Error getting balances', e);
-						throw new Error('oopsie');
+						return [];
 					}),
 				},
 				operations: [

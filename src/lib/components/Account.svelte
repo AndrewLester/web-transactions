@@ -43,8 +43,8 @@ function loadingWrap(func?: (...args: any) => void) {
 		min="0"
 		inputmode="numeric"
 	/>
-	<button>Deposit</button>
-	<button formaction="?/withdraw">Withdraw</button>
+	<button disabled={loading}>Deposit</button>
+	<button formaction="?/withdraw" disabled={loading}>Withdraw</button>
 	{#if loading}
 		<svg
 			width="15"

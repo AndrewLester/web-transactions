@@ -44,11 +44,7 @@ export class SS2PLServer implements Server {
 		return await this.readThenUpdate(timestamp, account, -amount);
 	}
 
-	async balance(
-		timestamp: Timestamp,
-		accountName: Account['name'],
-		abortNotFound = true
-	): Promise<number> {
+	async balance(timestamp: Timestamp, accountName: Account['name'], abortNotFound = true) {
 		if (!this.isTimestampValid(timestamp)) {
 			throw timestampInvalid(this, timestamp);
 		}
@@ -67,6 +63,7 @@ export class SS2PLServer implements Server {
 		const lock = this.database.getLock(timestamp, accountName, 'read');
 
 		const waitFor = lock.getWaitFor(timestamp, 'read');
+		console.log(timestamp, 'is waiting for:', waitFor);
 		for (const other of waitFor) {
 			if (!this.waitForGraph.has(timestamp)) {
 				this.waitForGraph.set(timestamp, new Set());
@@ -75,7 +72,7 @@ export class SS2PLServer implements Server {
 		}
 
 		if (this.hasWaitForCycle(timestamp)) {
-			throw deadlockDetected();
+			throw deadlockDetected(this, timestamp);
 		}
 
 		await lock.rLock(timestamp);
@@ -85,7 +82,9 @@ export class SS2PLServer implements Server {
 			throw timestampInvalid(this, timestamp);
 		}
 
-		return this.database.getBalance(timestamp, accountName);
+		this.resetTimeout(timestamp);
+
+		return await this.database.getBalance(timestamp, accountName);
 	}
 
 	allAccountNames(timestamp: Timestamp): string[] {
@@ -125,7 +124,8 @@ export class SS2PLServer implements Server {
 
 	async abort(timestamp: Timestamp) {
 		if (!this.isTimestampValid(timestamp)) {
-			throw timestampInvalid(this, timestamp);
+			// Don't abort again...
+			throw timestampInvalid();
 		}
 
 		this.endTransaction(timestamp);
@@ -139,19 +139,20 @@ export class SS2PLServer implements Server {
 		this.resetTimeout(timestamp, true);
 
 		for (const { lock } of this.database.getBalancesAndLocks(timestamp)) {
+			console.log('Check if we have lock...', timestamp, lock.writeLocked);
 			if (lock.hasLock(timestamp)) {
 				lock.unlock(timestamp);
 			}
 		}
 
 		const deletedTimestamps = [] as Timestamp[];
-		for (const [timestamp, waitFor] of this.waitForGraph.entries()) {
+		for (const [fromTimestamp, waitFor] of this.waitForGraph.entries()) {
 			waitFor.delete(timestamp);
 			if (waitFor.size === 0) {
-				deletedTimestamps.push(timestamp);
+				deletedTimestamps.push(fromTimestamp);
 			}
 		}
-		deletedTimestamps.forEach(this.waitForGraph.delete);
+		deletedTimestamps.forEach((timestamp) => this.waitForGraph.delete(timestamp));
 
 		this.database.destroyWorkspace(timestamp);
 	}
@@ -168,7 +169,6 @@ export class SS2PLServer implements Server {
 			timestamp,
 			setTimeout(() => {
 				if (this.database.hasWorkspace(timestamp)) {
-					console.log('Aborting after timeout', timestamp);
 					this.abort(timestamp);
 				}
 			}, 1000 * timeout)
@@ -215,8 +215,10 @@ export class SS2PLServer implements Server {
 			this.waitForGraph.get(timestamp)!.add(other);
 		}
 
+		console.log(timestamp, 'waiting for:', waitFor);
+
 		if (this.hasWaitForCycle(timestamp)) {
-			throw deadlockDetected();
+			throw deadlockDetected(this, timestamp);
 		}
 
 		console.log('Acquiring write lock...', timestamp, waitFor);
@@ -227,6 +229,8 @@ export class SS2PLServer implements Server {
 		if (!this.database.hasWorkspace(timestamp)) {
 			throw timestampInvalid(this, timestamp);
 		}
+
+		this.resetTimeout(timestamp);
 
 		this.database.setBalance(timestamp, accountName, amount);
 	}

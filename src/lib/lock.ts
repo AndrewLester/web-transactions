@@ -33,6 +33,8 @@ export class RWLock<ID> {
 
 		const lockWaits = [this.writeUnlockedPromise(id), this.readUnlockedPromise(id)];
 
+		await Promise.all(lockWaits);
+
 		// Drop our read lock if we have it
 		if (this.readLocked.has(id)) {
 			this.readLocked.delete(id);
@@ -40,8 +42,6 @@ export class RWLock<ID> {
 				this.readUnlocked();
 			}
 		}
-
-		await Promise.all(lockWaits);
 
 		this.writeLocked = id;
 		this.writeUnlockedPromises.delete(id);
@@ -91,12 +91,17 @@ export class RWLock<ID> {
 		}
 
 		this.readLocked.delete(id);
-		if (this.readLocked.size === 0) {
-			this.readUnlocked();
+		if (this.readLocked.size <= 1) {
+			this.readUnlocked(this.readLocked.size === 1);
 		}
 	}
 
 	private writeUnlockedPromise(id: ID) {
+		console.log(
+			'Getting the write unlocked promise:',
+			this.writeUnlockedPromises.entries(),
+			this.writeLocked
+		);
 		if (this.writeUnlockedPromises.size === 0 && this.writeLocked === null) {
 			this.writeUnlockedPromises.set(id, { promise: Promise.resolve(), resolve: () => {} });
 			return Promise.resolve();
@@ -112,7 +117,7 @@ export class RWLock<ID> {
 	}
 
 	private readUnlockedPromise(id: ID) {
-		if (this.readLocked.size === 0) {
+		if (this.readLocked.size === 0 || (this.readLocked.size === 1 && this.readLocked.has(id))) {
 			this.readUnlockedPromises.set(id, { promise: Promise.resolve(), resolve: () => {} });
 			return Promise.resolve();
 		}
@@ -133,9 +138,15 @@ export class RWLock<ID> {
 		this.writeUnlockedPromises.delete(chosenUnlock);
 	}
 
-	private readUnlocked() {
+	private readUnlocked(onlyIfUpgrading = false) {
 		const potentialUnlocks = [...this.readUnlockedPromises.keys()] as ID[];
-		const chosenUnlock = potentialUnlocks[Math.trunc(potentialUnlocks.length * Math.random())];
+		let chosenUnlock = potentialUnlocks[Math.trunc(potentialUnlocks.length * Math.random())];
+
+		// When this flag is set, assume only 1 ID has read lock for upgrading
+		if (onlyIfUpgrading && this.readUnlockedPromises.has([...this.readLocked.values()][0])) {
+			chosenUnlock = [...this.readLocked.values()][0];
+		}
+
 		this.readUnlockedPromises.get(chosenUnlock)?.resolve?.(null);
 		this.readUnlockedPromises.delete(chosenUnlock);
 	}
