@@ -71,6 +71,11 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 			account: accountName,
 			value: Number(formData.get('amount')),
 		},
+		// We always get balance right after making a change
+		{
+			type: 'balance',
+			account: accountName,
+		},
 	];
 	data.accounts.balances = Promise.resolve(accounts);
 }
