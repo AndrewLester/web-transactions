@@ -79,8 +79,11 @@ export class Database {
 		return account.lock;
 	}
 
-	getBalancesAndLocks(timestamp: Timestamp) {
-		return [...(this.workspaces.get(timestamp)?.values() ?? [])].map(({ account }) => ({
+	// Had to make this general and get locks for all accounts... Probably not? ideal,
+	// but necessary because we might be waiting for a lock (need to stop waiting), but never actually read
+	// so account is not in workspace
+	getBalancesAndLocks() {
+		return [...(this.accounts.values() ?? [])].map((account) => ({
 			balance: account.balance,
 			lock: account.lock,
 		}));

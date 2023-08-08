@@ -79,6 +79,10 @@ export class RWLock<ID> {
 		return hasWrite;
 	}
 
+	isWaiting(id: ID) {
+		return this.writeUnlockedPromises.has(id) || this.readUnlockedPromises.has(id);
+	}
+
 	unlock(id: ID) {
 		if (this.writeLocked !== id && !this.readLocked.has(id)) {
 			throw new Error('Attempted to unlock un-owned lock');
@@ -100,6 +104,11 @@ export class RWLock<ID> {
 		}
 
 		// Same as other above...
+		this.readUnlockedPromises.delete(id);
+	}
+
+	stopWaiting(id: ID) {
+		this.writeUnlockedPromises.delete(id);
 		this.readUnlockedPromises.delete(id);
 	}
 

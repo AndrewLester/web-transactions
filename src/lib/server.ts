@@ -1,4 +1,4 @@
-import { fail, type Actions } from '@sveltejs/kit';
+import { fail, type Actions, type Load } from '@sveltejs/kit';
 import { errorFrom } from './error';
 import type { Timestamp } from './timestamp';
 
@@ -20,9 +20,12 @@ export interface Server {
 
 export type Operation = { type: string; account?: string; value?: number };
 
-export function serverPageFunctions(server: Server) {
+export function serverPageFunctions(
+	getServer: ({ params }: Pick<Parameters<Load>[0], 'params'>) => Server
+) {
 	return {
-		async load() {
+		async load({ params }) {
+			const server = getServer({ params });
 			const timestamp = server.startTransaction();
 			console.log('Timestamp:', timestamp);
 			return {
@@ -41,7 +44,8 @@ export function serverPageFunctions(server: Server) {
 			};
 		},
 		actions: {
-			async deposit({ request }) {
+			async deposit({ request, params }) {
+				const server = getServer({ params });
 				const formData = await request.formData();
 				const timestamp = Number(formData.get('timestamp'));
 				const account = formData.get('account') as unknown as string;
@@ -54,7 +58,8 @@ export function serverPageFunctions(server: Server) {
 				}
 			},
 
-			async withdraw({ request }) {
+			async withdraw({ request, params }) {
+				const server = getServer({ params });
 				const formData = await request.formData();
 				const timestamp = Number(formData.get('timestamp'));
 				const account = formData.get('account') as unknown as string;
@@ -67,7 +72,8 @@ export function serverPageFunctions(server: Server) {
 				}
 			},
 
-			async commit({ request }) {
+			async commit({ request, params }) {
+				const server = getServer({ params });
 				const formData = await request.formData();
 				const timestamp = Number(formData.get('timestamp'));
 				console.log('COMMIT:', timestamp);
@@ -78,7 +84,8 @@ export function serverPageFunctions(server: Server) {
 				}
 			},
 
-			async abort({ request }) {
+			async abort({ request, params }) {
+				const server = getServer({ params });
 				const formData = await request.formData();
 				const timestamp = Number(formData.get('timestamp'));
 				console.log('ABORTING:', timestamp);
@@ -89,5 +96,8 @@ export function serverPageFunctions(server: Server) {
 				}
 			},
 		} satisfies Actions,
+	} satisfies {
+		load: Load;
+		actions: Actions;
 	};
 }

@@ -109,7 +109,7 @@ export class SS2PLServer implements Server {
 			throw timestampInvalid(this, timestamp);
 		}
 
-		for (const { balance, lock } of this.database.getBalancesAndLocks(timestamp)) {
+		for (const { balance, lock } of this.database.getBalancesAndLocks()) {
 			if (lock.hasLock(timestamp, 'write')) {
 				if (balance < 0) {
 					throw accountNegativeBal(this, timestamp);
@@ -138,10 +138,12 @@ export class SS2PLServer implements Server {
 	private endTransaction(timestamp: Timestamp) {
 		this.resetTimeout(timestamp, true);
 
-		for (const { lock } of this.database.getBalancesAndLocks(timestamp)) {
+		for (const { lock } of this.database.getBalancesAndLocks()) {
 			console.log('Check if we have lock...', timestamp, lock.writeLocked);
 			if (lock.hasLock(timestamp)) {
 				lock.unlock(timestamp);
+			} else if (lock.isWaiting(timestamp)) {
+				lock.stopWaiting(timestamp);
 			}
 		}
 
