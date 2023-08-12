@@ -96,9 +96,9 @@ export class Database {
 	commitWorkspace(timestamp: Timestamp) {
 		for (const { account, written } of this.workspaces.get(timestamp)!.values()) {
 			if (written) {
-				if (!this.accounts.has(account.name)) {
+				if (!this.accounts.has(account.name) && account.balance > 0) {
 					this.accounts.set(account.name, account);
-				} else {
+				} else if (this.accounts.has(account.name)) {
 					// Must exist in accounts since we had write lock...
 					this.accounts.get(account.name)!.balance = account.balance;
 				}
@@ -107,6 +107,11 @@ export class Database {
 	}
 
 	destroyWorkspace(timestamp: Timestamp) {
+		for (const { account, written } of this.workspaces.get(timestamp)!.values()) {
+			if (written && account.balance === 0) {
+				this.accounts.delete(account.name);
+			}
+		}
 		this.workspaces.delete(timestamp);
 	}
 }

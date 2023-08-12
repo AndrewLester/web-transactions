@@ -252,6 +252,10 @@ aside {
 	margin-top: 30px;
 }
 
+aside h2 {
+	font-variant-numeric: tabular-nums;
+}
+
 label,
 input {
 	display: block;

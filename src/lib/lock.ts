@@ -113,11 +113,6 @@ export class RWLock<ID> {
 	}
 
 	private writeUnlockedPromise(id: ID) {
-		console.log(
-			'Getting the write unlocked promise:',
-			this.writeUnlockedPromises.entries(),
-			this.writeLocked
-		);
 		if (this.writeUnlockedPromises.size === 0 && this.writeLocked === null) {
 			this.writeUnlockedPromises.set(id, { promise: Promise.resolve(), resolve: () => {} });
 			return Promise.resolve();

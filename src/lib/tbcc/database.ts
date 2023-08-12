@@ -6,6 +6,7 @@ export class Database {
 
 export class Account {
 	creators = new Set<Timestamp>(); // Transactions which created this account, for rollback handling
+	deletors = new Set<Timestamp>();
 	readTimestamps = new Set<Timestamp>();
 	tentativeWrites = [] as TentativeWrite[];
 	committedTimestamp = 0;

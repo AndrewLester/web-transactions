@@ -124,6 +124,18 @@ export class TBCCServer implements Server {
 		}
 
 		for (const account of this.database.accounts.values()) {
+			if (
+				account.deletors.has(timestamp) &&
+				account.tentativeWrites.every((tw) => tw.timestamp <= timestamp)
+			) {
+				account.committedBalance = 0;
+				account.committedTimestamp = 0;
+				this.database.accounts.delete(account.name);
+				continue;
+			}
+
+			account.readTimestamps.delete(timestamp);
+
 			for (let i = 0; i < account.tentativeWrites.length; i++) {
 				const tentativeWrite = account.tentativeWrites[i];
 				if (tentativeWrite.timestamp === timestamp) {
@@ -251,6 +263,16 @@ export class TBCCServer implements Server {
 		for (const tentativeWrite of account.tentativeWrites) {
 			if (tentativeWrite.timestamp === timestamp) {
 				tentativeWrite.tentativeBalance = amount;
+				if (amount === 0) {
+					account.creators.delete(timestamp);
+					account.deletors.add(timestamp);
+					return;
+				}
+
+				if (account.committedTimestamp === 0) {
+					account.creators.add(timestamp);
+				}
+				account.deletors.delete(timestamp);
 				return;
 			}
 		}
@@ -262,6 +284,13 @@ export class TBCCServer implements Server {
 
 		if (account.committedTimestamp === 0) {
 			account.creators.add(timestamp);
+		}
+
+		if (amount === 0) {
+			account.creators.delete(timestamp);
+			account.deletors.add(timestamp);
+		} else {
+			account.deletors.delete(timestamp);
 		}
 	}
 

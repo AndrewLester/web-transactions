@@ -107,8 +107,6 @@ export class MVCCServer implements Server {
 	}
 
 	private write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
-		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
-
 		if (!this.database.snapshots.has(accountName)) {
 			this.database.snapshots.set(accountName, [new Account(accountName, 0)]);
 		}

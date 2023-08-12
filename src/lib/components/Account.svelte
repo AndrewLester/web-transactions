@@ -35,7 +35,12 @@ function loadingWrap(func?: (...args: any) => void) {
 	class:loading
 >
 	<input type="hidden" name="timestamp" value={timestamp} />
-	<p class="name">{account.name}</p>
+	<p class="name">
+		{account.name}
+		{#if account.balance === 0}
+			<span class="account-message">(Will be deleted)</span>
+		{/if}
+	</p>
 	<p class="balance">${account.balance}</p>
 	<input type="hidden" name="account" value={account.name} />
 	<label for="amount-{account.name}">Amount</label>
@@ -56,7 +61,6 @@ function loadingWrap(func?: (...args: any) => void) {
 			viewBox="0 0 100 100"
 			stroke-dasharray="76 188"
 			stroke-dashoffset="152"
-			transition:fade
 		>
 			<circle cx="50" cy="50" r="42" stroke-width="16" stroke="#2196f3" fill="transparent" />
 		</svg>
@@ -95,6 +99,10 @@ svg {
 	font-size: 0.9rem;
 	margin-bottom: 2px;
 	line-height: 1;
+}
+
+.account-message {
+	font-style: italic;
 }
 
 .balance {

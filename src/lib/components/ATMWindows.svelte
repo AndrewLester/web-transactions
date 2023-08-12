@@ -52,6 +52,7 @@ let frame2: HTMLIFrameElement;
 	border-right: 2px dashed var(--surface-dark);
 }
 iframe {
+	display: block;
 	height: calc(100dvh - var(--nav-height));
 	width: 100%;
 	appearance: none;
@@ -69,5 +70,8 @@ a {
 	text-decoration: none;
 	padding-inline: 3px;
 	border-radius: 2.5px;
+}
+button {
+	cursor: pointer;
 }
 </style>

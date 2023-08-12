@@ -7,8 +7,6 @@ export const accountDirty = abortError(() => new Error('Account is dirty'));
 
 class TBCCStrictServer extends TBCCServer {
 	protected write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
-		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
-
 		if (!this.database.accounts.has(accountName)) {
 			this.database.accounts.set(accountName, new Account(accountName, 0));
 		}
