@@ -63,7 +63,7 @@ export class SS2PLServer implements Server {
 		const lock = this.database.getLock(timestamp, accountName, 'read');
 
 		const waitFor = lock.getWaitFor(timestamp, 'read');
-		console.log(timestamp, 'is waiting for:', waitFor);
+
 		for (const other of waitFor) {
 			if (!this.waitForGraph.has(timestamp)) {
 				this.waitForGraph.set(timestamp, new Set());
@@ -139,7 +139,6 @@ export class SS2PLServer implements Server {
 		this.resetTimeout(timestamp, true);
 
 		for (const { lock } of this.database.getBalancesAndLocks()) {
-			console.log('Check if we have lock...', timestamp, lock.writeLocked);
 			if (lock.hasLock(timestamp)) {
 				lock.unlock(timestamp);
 			} else if (lock.isWaiting(timestamp)) {
@@ -205,8 +204,6 @@ export class SS2PLServer implements Server {
 	}
 
 	protected async write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
-		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
-
 		const lock = this.database.getLock(timestamp, accountName, 'write');
 
 		const waitFor = lock.getWaitFor(timestamp, 'write');
@@ -217,15 +214,11 @@ export class SS2PLServer implements Server {
 			this.waitForGraph.get(timestamp)!.add(other);
 		}
 
-		console.log(timestamp, 'waiting for:', waitFor);
-
 		if (this.hasWaitForCycle(timestamp)) {
 			throw deadlockDetected(this, timestamp);
 		}
 
-		console.log('Acquiring write lock...', timestamp, waitFor);
 		await lock.wLock(timestamp);
-		console.log('Got it:', timestamp);
 
 		// We aborted...
 		if (!this.database.hasWorkspace(timestamp)) {

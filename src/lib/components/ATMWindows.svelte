@@ -9,28 +9,30 @@ let frame2: HTMLIFrameElement;
 	<div class="atm-page">
 		<div class="button-group">
 			<a href="/{path}/atm" target="_blank">
-				Pop out <svg width="12" height="12" viewBox="0 0 12 12">
+				<svg width="12" height="12" viewBox="0 0 12 12">
 					<path
 						fill="currentColor"
 						d="M6 1h5v5L8.86 3.85 4.7 8 4 7.3l4.15-4.16L6 1ZM2 3h2v1H2v6h6V8h1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"
 					/>
 				</svg>
+				Pop out
 			</a>
-			<button on:click={() => frame1.contentWindow?.location.reload()}>↻</button>
+			<button on:click={() => frame1.contentWindow?.location.reload()}>↻ Reload tab</button>
 		</div>
 		<iframe src="/{path}/atm" title="Atm 1" bind:this={frame1} />
 	</div>
 	<div class="atm-page">
 		<div class="button-group">
 			<a href="/{path}/atm" target="_blank">
-				Pop out <svg width="12" height="12" viewBox="0 0 12 12">
+				<svg width="12" height="12" viewBox="0 0 12 12">
 					<path
 						fill="currentColor"
 						d="M6 1h5v5L8.86 3.85 4.7 8 4 7.3l4.15-4.16L6 1ZM2 3h2v1H2v6h6V8h1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"
 					/>
 				</svg>
+				Pop out
 			</a>
-			<button on:click={() => frame2.contentWindow?.location.reload()}>↻</button>
+			<button on:click={() => frame2.contentWindow?.location.reload()}>↻ Reload tab</button>
 		</div>
 		<iframe src="/{path}/atm" title="Atm 2" bind:this={frame2} />
 	</div>
@@ -44,6 +46,10 @@ let frame2: HTMLIFrameElement;
 .atm-page {
 	position: relative;
 	flex: 1 1 0;
+	padding-inline: 5px;
+}
+.atm-page:first-of-type {
+	border-right: 2px dashed var(--surface-dark);
 }
 iframe {
 	height: calc(100dvh - var(--nav-height));

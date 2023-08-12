@@ -20,6 +20,11 @@ export interface Server {
 
 export type Operation = { type: string; account?: string; value?: number };
 
+export type Transaction = {
+	timestamp: Timestamp;
+	operations: Operation[];
+};
+
 export function serverPageFunctions(
 	getServer: ({ params }: Pick<Parameters<Load>[0], 'params'>) => Server
 ) {
@@ -27,7 +32,7 @@ export function serverPageFunctions(
 		async load({ params }) {
 			const server = getServer({ params });
 			const timestamp = server.startTransaction();
-			console.log('Timestamp:', timestamp);
+
 			return {
 				timestamp,
 				numAccounts: server.numAccounts(timestamp),
@@ -76,7 +81,7 @@ export function serverPageFunctions(
 				const server = getServer({ params });
 				const formData = await request.formData();
 				const timestamp = Number(formData.get('timestamp'));
-				console.log('COMMIT:', timestamp);
+
 				try {
 					await server.commit(timestamp);
 				} catch (e) {
@@ -88,7 +93,7 @@ export function serverPageFunctions(
 				const server = getServer({ params });
 				const formData = await request.formData();
 				const timestamp = Number(formData.get('timestamp'));
-				console.log('ABORTING:', timestamp);
+
 				try {
 					await server.abort(timestamp);
 				} catch (e) {

@@ -149,7 +149,6 @@ export class TBCCServer implements Server {
 		for (const account of this.database.accounts.values()) {
 			account.creators.delete(timestamp);
 			if (account.creators.size === 0 && account.committedTimestamp === 0) {
-				console.log('Removing:', account.name);
 				this.database.accounts.delete(account.name);
 				continue;
 			}
@@ -232,8 +231,6 @@ export class TBCCServer implements Server {
 	}
 
 	protected write(timestamp: Timestamp, accountName: Account['name'], amount: number) {
-		console.log(`WRITE ${timestamp}: ${accountName} = ${amount}`);
-
 		if (!this.database.accounts.has(accountName)) {
 			this.database.accounts.set(accountName, new Account(accountName, 0));
 		}

@@ -3,10 +3,11 @@ import { enhance } from '$app/forms';
 import { beforeNavigate, invalidateAll } from '$app/navigation';
 import Account from '$lib/components/Account.svelte';
 import { operation, transaction, type OperationSuccessResult } from '$lib/form.js';
-import type { Operation } from '$lib/server.js';
+import type { Operation, Transaction } from '$lib/server.js';
 import { timeout } from '$lib/timestamp.js';
 import { onMount } from 'svelte';
-import { fade } from 'svelte/transition';
+import { flip } from 'svelte/animate';
+import { fade, slide } from 'svelte/transition';
 
 export let data;
 
@@ -14,7 +15,7 @@ let timeoutStart = Date.now();
 let timeoutCurrent = timeout;
 let error: string | undefined;
 let cancelForm: HTMLFormElement;
-let transactions = [] as Operation[][];
+let transactions = [] as Transaction[];
 
 // Give them their time back after blocking ends, as is done in the backend
 $: data.accounts.balances.then(() => (timeoutStart = Date.now()));
@@ -42,12 +43,13 @@ beforeNavigate(({ type }) => {
 });
 
 function addOperation(operation: Operation) {
-	data.operations = [...data.operations, operation];
+	// Don't do this reactively to avoid layout shift
+	data.operations.push(operation);
 }
 
 // Make sure you invalidate after this!
 function finishTransaction() {
-	transactions = [data.operations, ...transactions];
+	transactions = [{ timestamp: data.timestamp, operations: data.operations }, ...transactions];
 }
 
 async function success(action: URL, formData: FormData, result: OperationSuccessResult) {
@@ -125,6 +127,7 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 		<h2>New Account</h2>
 
 		<form
+			class="create-form"
 			action="?/deposit"
 			method="POST"
 			name="deposit"
@@ -150,44 +153,48 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 
 		<hr />
 
-		<form
-			action="?/commit"
-			method="POST"
-			name="commit"
-			use:enhance={transaction({
-				success() {
-					timeoutStart = Date.now();
-					addOperation({ type: 'commit' });
-					finishTransaction();
-				},
-				abort(e) {
-					error = e;
-				},
-			})}
-		>
-			<input type="hidden" name="timestamp" value={data.timestamp} />
-			<button>Save changes</button>
-		</form>
+		<div class="button-group">
+			<form
+				action="?/commit"
+				method="POST"
+				name="commit"
+				use:enhance={transaction({
+					success() {
+						timeoutStart = Date.now();
+						// Don't do this reactively to avoid layout shift
+						addOperation({ type: 'commit' });
+						finishTransaction();
+					},
+					abort(e) {
+						error = e;
+					},
+				})}
+			>
+				<input type="hidden" name="timestamp" value={data.timestamp} />
+				<button>Save changes</button>
+			</form>
 
-		<form
-			action="?/abort"
-			method="POST"
-			name="abort"
-			bind:this={cancelForm}
-			use:enhance={transaction({
-				success() {
-					timeoutStart = Date.now();
-					addOperation({ type: 'abort' });
-					finishTransaction();
-				},
-				abort(e) {
-					error = e;
-				},
-			})}
-		>
-			<input type="hidden" name="timestamp" value={data.timestamp} />
-			<button>Cancel</button>
-		</form>
+			<form
+				action="?/abort"
+				method="POST"
+				name="abort"
+				bind:this={cancelForm}
+				use:enhance={transaction({
+					success() {
+						timeoutStart = Date.now();
+						// Don't do this reactively to avoid layout shift
+						addOperation({ type: 'abort' });
+						finishTransaction();
+					},
+					abort(e) {
+						error = e;
+					},
+				})}
+			>
+				<input type="hidden" name="timestamp" value={data.timestamp} />
+				<button>Cancel</button>
+			</form>
+		</div>
 	</article>
 
 	<aside>
@@ -199,21 +206,27 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 		<p>Timeout: {timeoutCurrent}</p>
 		<hr />
 		<ol class="operations">
-			{#each data.operations as operation}
-				<li>{operation.type.toUpperCase()} {operation?.account ?? ''} {operation?.value ?? ''}</li>
+			{#each data.operations as operation, i (i)}
+				<li transition:slide={{ duration: 250 }}>
+					<span class="operation-name">{operation.type.toUpperCase()}</span>
+					{operation?.account ?? ''}
+					{operation?.value ?? ''}
+				</li>
 			{/each}
 		</ol>
 		<hr />
 		<div class="past-transactions">
-			{#each transactions as transaction, i}
-				<p>Old transaction {i}</p>
-				{#each transaction as operation}
-					<li>
-						{operation.type.toUpperCase()}
-						{operation?.account ?? ''}
-						{operation?.value ?? ''}
-					</li>
-				{/each}
+			{#each transactions as transaction (transaction.timestamp)}
+				<div transition:fade animate:flip={{ duration: 200 }}>
+					<p>{transaction.timestamp}</p>
+					{#each transaction.operations as operation}
+						<li>
+							<span class="operation-name">{operation.type.toUpperCase()}</span>
+							{operation?.account ?? ''}
+							{operation?.value ?? ''}
+						</li>
+					{/each}
+				</div>
 			{/each}
 		</div>
 	</aside>
@@ -248,6 +261,10 @@ input {
 	margin-bottom: 25px;
 }
 
+hr {
+	margin-block: 0.5em;
+}
+
 .accounts {
 	display: grid;
 	grid-template-rows: 1fr;
@@ -263,11 +280,26 @@ input {
 }
 
 .operations li {
-	font-family: monospace;
+	font-family: 'Roboto Mono', monospace;
 	font-size: 1.125rem;
+}
+
+.operation-name {
+	font-weight: bold;
 }
 
 .past-transactions {
 	font-size: 0.85rem;
+	list-style-type: none;
+}
+
+.past-transactions > div {
+	margin-top: 0.5em;
+}
+
+.button-group {
+	display: flex;
+	flex-flow: row nowrap;
+	gap: 10px;
 }
 </style>

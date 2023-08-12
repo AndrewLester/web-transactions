@@ -2,6 +2,7 @@
 import { enhance } from '$app/forms';
 import { operation } from '$lib/form';
 import type { Timestamp } from '$lib/timestamp';
+import { fade } from 'svelte/transition';
 
 export let timestamp: Timestamp;
 export let account: { name: string; balance: number };
@@ -55,6 +56,7 @@ function loadingWrap(func?: (...args: any) => void) {
 			viewBox="0 0 100 100"
 			stroke-dasharray="76 188"
 			stroke-dashoffset="152"
+			transition:fade
 		>
 			<circle cx="50" cy="50" r="42" stroke-width="16" stroke="#2196f3" fill="transparent" />
 		</svg>
