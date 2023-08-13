@@ -1,6 +1,7 @@
 <script lang="ts">
-import { enhance } from '$app/forms';
+import { applyAction, deserialize, enhance } from '$app/forms';
 import { beforeNavigate, invalidateAll } from '$app/navigation';
+import { page } from '$app/stores';
 import Account from '$lib/components/Account.svelte';
 import { operation, transaction, type OperationSuccessResult } from '$lib/form.js';
 import type { Operation, Transaction } from '$lib/server.js';
@@ -16,12 +17,14 @@ let timeoutCurrent = timeout;
 let error: string | undefined;
 let cancelForm: HTMLFormElement;
 let transactions = [] as Transaction[];
+let autoRestart = true;
+
+$: timestampBased = $page.params.ccType === 'timestamp-based';
 
 // Give them their time back after blocking ends, as is done in the backend
 $: data.accounts.balances.then(() => (timeoutStart = Date.now()));
 $: if (timeoutCurrent <= 0) {
-	addOperation({ type: 'abort' });
-	finishTransaction();
+	finishTransaction({ type: 'abort' });
 	// Grab a new timestamp once this one is timed out.
 	invalidateAll();
 	timeoutStart = Date.now();
@@ -48,8 +51,10 @@ function addOperation(operation: Operation) {
 }
 
 // Make sure you invalidate after this!
-function finishTransaction() {
+function finishTransaction(operation: Operation) {
+	addOperation(operation);
 	transactions = [{ timestamp: data.timestamp, operations: data.operations }, ...transactions];
+	timeoutStart = Date.now();
 }
 
 async function success(action: URL, formData: FormData, result: OperationSuccessResult) {
@@ -81,6 +86,43 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 	];
 	data.accounts.balances = Promise.resolve(accounts);
 }
+
+async function abort(e: string | undefined, formElement: HTMLFormElement, formData: FormData) {
+	timeoutStart = Date.now();
+	error = e;
+	finishTransaction({ type: 'abort' });
+	await invalidateAll();
+	if (timestampBased && error === 'Timestamp outdated' && autoRestart) {
+		error = undefined;
+		// Slice off 2 because we do that by default too...
+		const operations = transactions[0].operations.slice(2, -1);
+		for (const operation of operations) {
+			const formData = new FormData();
+			formData.append('timestamp', data.timestamp.toString());
+			// Must be an account for these type of operations
+			formData.append('account', operation.account?.toString() ?? '');
+			if (operation.value) {
+				formData.append('amount', operation.value.toString());
+			}
+			const result = deserialize(
+				await fetch(`?/${operation.type}`, { body: formData, method: 'POST' }).then((res) =>
+					res.text()
+				)
+			);
+			await applyAction(result);
+		}
+
+		formData.set('timestamp', data.timestamp.toString());
+		const result = deserialize(
+			await fetch(formElement.action, { body: formData, method: 'POST' }).then((res) => res.text())
+		);
+		await applyAction(result);
+		const url = new URL(formElement.action);
+		if (result.type === 'success') {
+			success(url, formData, result as OperationSuccessResult);
+		}
+	}
+}
 </script>
 
 <main>
@@ -107,11 +149,7 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 							timestamp={data.timestamp}
 							operationArgs={{
 								success,
-								abort(e) {
-									timeoutStart = Date.now();
-									error = e;
-									cancelForm.requestSubmit();
-								},
+								abort,
 								start() {
 									timeoutStart = Date.now();
 								},
@@ -160,10 +198,7 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 				name="commit"
 				use:enhance={transaction({
 					success() {
-						timeoutStart = Date.now();
-						// Don't do this reactively to avoid layout shift
-						addOperation({ type: 'commit' });
-						finishTransaction();
+						finishTransaction({ type: 'commit' });
 					},
 					abort(e) {
 						error = e;
@@ -181,10 +216,7 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 				bind:this={cancelForm}
 				use:enhance={transaction({
 					success() {
-						timeoutStart = Date.now();
-						// Don't do this reactively to avoid layout shift
-						addOperation({ type: 'abort' });
-						finishTransaction();
+						finishTransaction({ type: 'abort' });
 					},
 					abort(e) {
 						error = e;
@@ -204,6 +236,11 @@ async function success(action: URL, formData: FormData, result: OperationSuccess
 		{/if}
 
 		<p>Timeout: {timeoutCurrent}</p>
+		{#if timestampBased}
+			<label>
+				<input type="checkbox" bind:checked={autoRestart} /> Autorestart
+			</label>
+		{/if}
 		<hr />
 		<ol class="operations">
 			{#each data.operations as operation, i (i)}
@@ -257,11 +294,11 @@ aside h2 {
 }
 
 label,
-input {
+input:not([type='checkbox']) {
 	display: block;
 }
 
-input {
+input:not([type='checkbox']) {
 	margin-bottom: 25px;
 }
 

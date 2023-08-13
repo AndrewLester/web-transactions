@@ -4,7 +4,7 @@ import { timeout, type Timestamp } from '$lib/timestamp';
 import { Database, Account, type TentativeWrite } from './database';
 
 export const accountNotFound = abortError(() => new Error('Account not found'));
-export const timestampOudated = abortError(() => new Error('Timestamp oudated'));
+export const timestampOudated = abortError(() => new Error('Timestamp outdated'));
 export const timestampInvalid = abortError(() => new Error('Timestamp invalid'));
 export const accountNegativeBal = abortError(() => new Error('Account has a negative balance'));
 

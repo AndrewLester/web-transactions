@@ -11,7 +11,7 @@ export function operation({
 	start,
 }: {
 	success?: (action: URL, formData: FormData, result: OperationSuccessResult) => void;
-	abort?: (error?: string) => void;
+	abort?: (error: string | undefined, formElement: HTMLFormElement, formData: FormData) => void;
 	start?: () => void;
 }) {
 	return () => {
@@ -24,7 +24,7 @@ export function operation({
 			result,
 		}) => {
 			if (result.type !== 'success') {
-				abort?.((result as any)?.data?.message);
+				abort?.((result as any)?.data?.message, formElement, formData);
 				return;
 			}
 			success?.(action, formData, result);
@@ -48,7 +48,7 @@ export function transaction({
 			} else {
 				success?.(action);
 			}
-			invalidateAll();
+			await invalidateAll();
 		};
 		return actionReturnHandler;
 	};
